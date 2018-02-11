@@ -8,10 +8,10 @@ opts['model_path'] = '../models/mdnet_vot-otb.pth'
 opts['img_size'] = 107
 opts['padding'] = 16
 
-opts['batch_pos'] = 16
-opts['batch_neg'] = 48
-opts['batch_neg_cand'] = 512
-opts['batch_test'] = 128
+opts['batch_pos'] = 32
+opts['batch_neg'] = 96
+opts['batch_neg_cand'] = 1024
+opts['batch_test'] = 256
 
 opts['n_samples'] = 256
 opts['trans_f'] = 0.6

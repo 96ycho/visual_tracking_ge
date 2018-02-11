@@ -141,7 +141,6 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False):
     # Load first image
     image = Image.open(img_list[0]).convert('RGB')
     
-    # 동선 학습 네트워크
     #traffic_line = TrafficLine(image.size)
     #traffic_line_bb = TrafficLine(image.size)
     #traffic_line.train(0, target_bbox)
@@ -199,13 +198,13 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False):
         if gt is not None:
             gt_rect = plt.Rectangle(tuple(gt[0,:2]),gt[0,2],gt[0,3], 
                     linewidth=3, edgecolor="#00ff00", zorder=1, fill=False)
-            ax.add_patch(gt_rect)
+            ax.add_patch(gt_rect) #green
         
         rect = plt.Rectangle(tuple(result_bb[0,:2]),result_bb[0,2],result_bb[0,3], 
                 linewidth=3, edgecolor="#ff0000", zorder=1, fill=False)
-        ax.add_patch(rect)
+        ax.add_patch(rect) #red
 
-        tl_bb = target_bbox
+        tl_bb = target_bbox #blue
         rect2 = plt.Rectangle(tuple(tl_bb[:2]),tl_bb[2],tl_bb[3], 
                 linewidth=3, edgecolor="#0000ff", zorder=1, fill=False)
         ax.add_patch(rect2)
@@ -250,50 +249,47 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False):
         
         # Copy previous result at failure
         tl_bb = target_bbox
+	#bbreg_samples = samples
         if not success:
             #print(i)
             wh = image.size
             bb = np.array(target_bbox, dtype='float32')
             score_tmp, x, y = 0, 0, 0
-            while x < wh[0]:
-                while y < wh[1]:
-                    sample = np.array([[x, y, bb[2], bb[3]]], dtype='float32')
-                    #samples = np.tile(sample[None,:],(1,1))
-                    #samples[0][0] = x
-                    #samples[0][1] = y
-                    sample_scores = forward_samples(model, image, sample, out_layer='fc6')
-                    top_scores, top_idx = sample_scores[:,1].topk(1)
-                    top_idx = top_idx.cpu().numpy()
-                    target_score = top_scores.mean()
-                    target_bbox = samples[top_idx].mean(axis=0)
-                    #print('! ',top_scores)
-                    #print('@ ',samples[top_idx])
-                    #print('# ', target_score)
-                    #print('$ ', target_bbox)
-                    #tmp = input()
-                    if target_score > score_tmp:
-                    	score_tmp = target_score
-                    	tl_bb = target_bbox
-                    y = y + 1#target_bbox[3]//10
-                x = x + 1#target_bbox[2]//10
+	    tl_ratio=[0.5, 0.75, 1, 1.25, 1.5]
+	    for ratio in tl_ratio:
+            	while x+bb[2]*ratio < wh[0]:
+                    while y+bb[3]*ratio < wh[1]:
+                    	sample = np.array([[x, y, bb[2], bb[3]]], dtype='float32')
+                    	sample_scores = forward_samples(model, image, sample, out_layer='fc6')
+                    	top_scores, top_idx = sample_scores[:,1].topk(1)
+                    	top_idx = top_idx.cpu().numpy()
+                    	target_score = top_scores.mean()
+                    	target_bbox = samples[top_idx].mean(axis=0)
+                    	if target_score > score_tmp:
+                    	    score_tmp = target_score
+                    	    tl_bb = target_bbox
+			    #tlbbreg_samples=samples[top_idx]
+                        y = y + 1#target_bbox[3]//10
+                    x = x + 1#target_bbox[2]//10
 
-            #target_bbox = traffic_line.predict(i)
-            #bbreg_bbox = traffic_line_bb.predict(i)
-            #target_bbox = result[i-1]
-            #bbreg_bbox = result_bb[i-1]
             target_bbox = tl_bb
+	    """
+            bbreg_feats = forward_samples(model, image, bbreg_samples)
+            bbreg_samples = bbreg.predict(bbreg_feats, bbreg_samples)
+            bbreg_bbox = bbreg_samples.mean(axis=0)
+	    """
             bbreg_bbox = tl_bb
 
         # Save result
         result[i] = target_bbox
         result_bb[i] = bbreg_bbox
         
-        # 동선 학습 시키기
         #traffic_line.train(i, target_bbox)
         #traffic_line_bb.train(i, bbreg_bbox)
         
         # Data collect
-        if success:
+	if success:
+        #if target_score > opts['success_thr']:
             # Draw pos/neg samples
             pos_examples = gen_samples(pos_generator, target_bbox, 
                                        opts['n_pos_update'],
@@ -312,14 +308,14 @@ def run_mdnet(img_list, init_bbox, gt=None, savefig_dir='', display=False):
             if len(neg_feats_all) > opts['n_frames_short']:
                 del neg_feats_all[0]
 
-        """
+        
         # Short term update
         if not success:
             nframes = min(opts['n_frames_short'],len(pos_feats_all))
             pos_data = torch.stack(pos_feats_all[-nframes:],0).view(-1,feat_dim)
             neg_data = torch.stack(neg_feats_all,0).view(-1,feat_dim)
             train(model, criterion, update_optimizer, pos_data, neg_data, opts['maxiter_update'])
-        """
+        
 
         # Long term update
         if success and i % opts['long_interval'] == 0:
